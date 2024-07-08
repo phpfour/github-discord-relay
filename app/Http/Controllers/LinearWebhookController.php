@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Request;
 
 class LinearWebhookController extends Controller
 {
@@ -12,6 +13,53 @@ class LinearWebhookController extends Controller
     public function __construct()
     {
         $this->linearToDiscordMap = config('user_mapping.linear');
+    }
+
+    public function handle(Request $request)
+    {
+        try {
+            // Log the incoming webhook
+            $this->logWebhook($request);
+
+            // Validate the incoming webhook
+            $payload = $request->all();
+
+            // Log the Linear payload
+            Log::channel('webhooks')->info('Linear payload received', ['payload' => $payload]);
+
+            // Transform the Linear webhook data to Discord format
+            $discordPayload = $this->transformToDiscordFormat($payload);
+
+            // Log the Discord payload
+            Log::channel('webhooks')->info('Discord payload prepared', ['payload' => $discordPayload]);
+
+            // Send the transformed data to Discord
+            $response = $this->sendToDiscord($discordPayload);
+
+            // Log the Discord response
+            Log::channel('webhooks')->info('Discord response received', ['response' => $response]);
+
+            return response()->json(['message' => 'Webhook processed successfully']);
+        } catch (\Exception $e) {
+            Log::channel('webhooks')->error('Error processing webhook', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'An error occurred while processing the webhook'], 500);
+        }
+    }
+
+    private function logWebhook(Request $request)
+    {
+        $logData = [
+            'headers' => $request->headers->all(),
+            'payload' => $request->all(),
+            'ip' => $request->ip(),
+            'timestamp' => now()->toIso8601String(),
+        ];
+
+        Log::channel('webhooks')->info('Incoming Linear webhook', $logData);
     }
 
     private function transformToDiscordFormat($linearPayload)
