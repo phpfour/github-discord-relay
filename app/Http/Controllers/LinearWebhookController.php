@@ -2,64 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class LinearWebhookController extends Controller
 {
-    private $linearToDiscordMap;
+    private array $linearToDiscordMap;
 
     public function __construct()
     {
-        $this->linearToDiscordMap = config('github_discord.linear_to_discord_map', []);
-    }
-
-    public function handle(Request $request)
-    {
-        try {
-            // Log the incoming webhook
-            $this->logWebhook($request);
-
-            // Validate the incoming webhook
-            $payload = $request->all();
-
-            // Log the Linear payload
-            Log::channel('webhooks')->info('Linear payload received', ['payload' => $payload]);
-
-            // Transform the Linear webhook data to Discord format
-            $discordPayload = $this->transformToDiscordFormat($payload);
-
-            // Log the Discord payload
-            Log::channel('webhooks')->info('Discord payload prepared', ['payload' => $discordPayload]);
-
-            // Send the transformed data to Discord
-            $response = $this->sendToDiscord($discordPayload);
-
-            // Log the Discord response
-            Log::channel('webhooks')->info('Discord response received', ['response' => $response]);
-
-            return response()->json(['message' => 'Webhook processed successfully']);
-        } catch (\Exception $e) {
-            Log::channel('webhooks')->error('Error processing webhook', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json(['error' => 'An error occurred while processing the webhook'], 500);
-        }
-    }
-
-    private function logWebhook(Request $request)
-    {
-        $logData = [
-            'headers' => $request->headers->all(),
-            'payload' => $request->all(),
-            'ip' => $request->ip(),
-            'timestamp' => now()->toIso8601String(),
-        ];
-
-        Log::channel('webhooks')->info('Incoming Linear webhook', $logData);
+        $this->linearToDiscordMap = config('user_mapping.linear');
     }
 
     private function transformToDiscordFormat($linearPayload)
@@ -71,7 +23,7 @@ class LinearWebhookController extends Controller
         $content = $this->generateContent($linearPayload);
 
         $embed = [
-            'title' => "New Linear Event: $action $type",
+            'title' => $this->generateEmbedTitle($type, $action, $data),
             'color' => $this->getColorForAction($action),
             'fields' => [],
             'footer' => [
@@ -79,6 +31,8 @@ class LinearWebhookController extends Controller
             ],
             'timestamp' => date('c'),
         ];
+
+        $this->addProjectField($embed, $data);
 
         switch ($type) {
             case 'Issue':
@@ -112,37 +66,85 @@ class LinearWebhookController extends Controller
         $type = $payload['type'] ?? 'unknown';
         $action = $payload['action'] ?? 'unknown';
         $data = $payload['data'] ?? [];
-        $content = "New Linear Event: $action $type\n";
 
-        // Tag the relevant Discord user if available
-        if (isset($data['user']['name'])) {
-            $linearUsername = $data['user']['name'];
-            $discordTag = $this->linearToDiscordMap[$linearUsername] ?? $linearUsername;
-            $content .= "User: $discordTag\n";
-        }
+        $userTag = isset($data['user']['id']) ? $this->getDiscordTag($data['user']['id']) : 'Someone';
+        $projectName = $data['team']['name'] ?? $data['project']['name'] ?? 'a project';
 
-        // Add more relevant information based on the event type
         switch ($type) {
             case 'Issue':
-                $content .= "Issue: {$data['title']}\n";
-                if (isset($data['assignee']['name'])) {
-                    $assigneeLinearUsername = $data['assignee']['name'];
-                    $assigneeDiscordTag = $this->linearToDiscordMap[$assigneeLinearUsername] ?? $assigneeLinearUsername;
-                    $content .= "Assigned to: $assigneeDiscordTag\n";
+                $content = "{$userTag} {$this->getActionVerb($action)} an issue";
+
+                if ($action !== 'remove') {
+                    $content .= " titled \"{$data['title']}\"";
                 }
+
+                $content .= " in {$projectName}.";
+
+                if (isset($data['assignee']['id'])) {
+                    $assigneeTag = $this->getDiscordTag($data['assignee']['id']);
+                    $content .= " Assigned to {$assigneeTag}.";
+                }
+
                 break;
+
             case 'Comment':
-                $content .= "Commented on: {$data['issue']['title']}\n";
+                $content = "{$userTag} commented on the issue \"{$data['issue']['title']}\" in {$projectName}.";
                 break;
+
             case 'Project':
-                $content .= "Project: {$data['name']}\n";
+                $content = "{$userTag} {$this->getActionVerb($action)} the project \"{$data['name']}\".";
                 break;
+
             case 'ProjectUpdate':
-                $content .= "Project Update: {$data['project']['name']}\n";
+                $content = "{$userTag} posted an update to the project \"{$data['project']['name']}\".";
                 break;
+
+            default:
+                $content = "{$userTag} performed an action in {$projectName}.";
         }
 
         return $content;
+    }
+
+    private function getActionVerb($action)
+    {
+        return match ($action) {
+            'create' => 'created',
+            'update' => 'updated',
+            'remove' => 'removed',
+            default => 'modified',
+        };
+    }
+
+    private function generateEmbedTitle($type, $action, $data)
+    {
+        $actionVerb = ucfirst($this->getActionVerb($action));
+
+        return match ($type) {
+            'Issue' => "{$actionVerb} Issue: {$data['title']}",
+            'Comment' => "New Comment on Issue: {$data['issue']['title']}",
+            'Project' => "{$actionVerb} Project: {$data['name']}",
+            'ProjectUpdate' => "Project Update: {$data['project']['name']}",
+            default => "New Linear Event: {$actionVerb} {$type}",
+        };
+    }
+
+    private function addProjectField(&$embed, $data)
+    {
+        $projectName = $data['team']['name'] ?? $data['project']['name'] ?? null;
+
+        if ($projectName) {
+            $embed['fields'][] = [
+                'name' => 'Project',
+                'value' => $projectName,
+                'inline' => true,
+            ];
+        }
+    }
+
+    private function getDiscordTag($linearUserId)
+    {
+        return $this->linearToDiscordMap[$linearUserId] ?? 'Unknown User';
     }
 
     private function getSender($payload)

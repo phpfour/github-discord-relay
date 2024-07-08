@@ -19,7 +19,7 @@ class GitHubWebhookController extends Controller
 
     private function modifyPayload(array $data)
     {
-        $githubToDiscordMap = config('github_discord.github_to_discord_map');
+        $githubToDiscordMap = config('user_mapping.github');
 
         array_walk_recursive($data, function (&$item) use ($githubToDiscordMap) {
             if (! is_string($item)) {
@@ -36,7 +36,7 @@ class GitHubWebhookController extends Controller
 
     private function relayToDiscord($data, Request $request)
     {
-        $discordWebhookUrl = config('services.discord.webhook_url');
+        $discordWebhookUrl = config('services.discord.webhook_url') . '/github';
 
         $requiredHeaders = [
             'Accept', 'Content-Type', 'User-Agent',
