@@ -8,4 +8,10 @@ return [
         'phpfour' => '<@538057585698537506>',
         'OmarFaruk-0x01' => '<@862462774578774047>',
     ],
+
+    'linear_to_discord_map' => [
+        // Linear username => Discord user ID
+        'emran' => '<@538057585698537506>',
+        'omar' => '<@862462774578774047>',
+    ],
 ];

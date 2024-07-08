@@ -8,6 +8,13 @@ use Illuminate\Support\Facades\Log;
 
 class LinearWebhookController extends Controller
 {
+    private $linearToDiscordMap;
+
+    public function __construct()
+    {
+        $this->linearToDiscordMap = config('github_discord.linear_to_discord_map', []);
+    }
+
     public function handle(Request $request)
     {
         try {
@@ -61,10 +68,10 @@ class LinearWebhookController extends Controller
         $type = $linearPayload['type'] ?? 'unknown';
         $data = $linearPayload['data'] ?? [];
 
-        $content = "New Linear Event: $action $type";
+        $content = $this->generateContent($linearPayload);
 
         $embed = [
-            'title' => $content,
+            'title' => "New Linear Event: $action $type",
             'color' => $this->getColorForAction($action),
             'fields' => [],
             'footer' => [
@@ -90,7 +97,6 @@ class LinearWebhookController extends Controller
                 $embed['description'] = "Unhandled event type: $type";
         }
 
-        // Get the sender information
         $sender = $this->getSender($linearPayload);
 
         return [
@@ -101,15 +107,52 @@ class LinearWebhookController extends Controller
         ];
     }
 
+    private function generateContent($payload)
+    {
+        $type = $payload['type'] ?? 'unknown';
+        $action = $payload['action'] ?? 'unknown';
+        $data = $payload['data'] ?? [];
+        $content = "New Linear Event: $action $type\n";
+
+        // Tag the relevant Discord user if available
+        if (isset($data['user']['name'])) {
+            $linearUsername = $data['user']['name'];
+            $discordTag = $this->linearToDiscordMap[$linearUsername] ?? $linearUsername;
+            $content .= "User: $discordTag\n";
+        }
+
+        // Add more relevant information based on the event type
+        switch ($type) {
+            case 'Issue':
+                $content .= "Issue: {$data['title']}\n";
+                if (isset($data['assignee']['name'])) {
+                    $assigneeLinearUsername = $data['assignee']['name'];
+                    $assigneeDiscordTag = $this->linearToDiscordMap[$assigneeLinearUsername] ?? $assigneeLinearUsername;
+                    $content .= "Assigned to: $assigneeDiscordTag\n";
+                }
+                break;
+            case 'Comment':
+                $content .= "Commented on: {$data['issue']['title']}\n";
+                break;
+            case 'Project':
+                $content .= "Project: {$data['name']}\n";
+                break;
+            case 'ProjectUpdate':
+                $content .= "Project Update: {$data['project']['name']}\n";
+                break;
+        }
+
+        return $content;
+    }
+
     private function getSender($payload)
     {
-        // Try to get the user who triggered the event
         if (isset($payload['data']['user']['name'])) {
             $username = $payload['data']['user']['name'];
             $avatarUrl = $payload['data']['user']['avatarUrl'] ?? null;
         } else {
             $username = 'Linear Webhook';
-            $avatarUrl = null; // You could set a default avatar URL here if you have one
+            $avatarUrl = null;
         }
 
         return [
