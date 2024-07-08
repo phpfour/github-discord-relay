@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -17,6 +18,15 @@ class LinearWebhookController extends Controller
 
     public function handle(Request $request)
     {
+        // Extract the webhook ID from the payload
+        $webhookId = $request->input('webhookId');
+
+        // Check if we've already processed this webhook
+        if ($this->isWebhookProcessed($webhookId)) {
+            Log::info("Duplicate webhook received and ignored", ['webhookId' => $webhookId]);
+            return response()->json(['message' => 'Webhook already processed'], 200);
+        }
+
         try {
             // Log the incoming webhook
             $this->logWebhook($request);
@@ -24,30 +34,35 @@ class LinearWebhookController extends Controller
             // Validate the incoming webhook
             $payload = $request->all();
 
-            // Log the Linear payload
-            Log::channel('webhooks')->info('Linear payload received', ['payload' => $payload]);
-
             // Transform the Linear webhook data to Discord format
             $discordPayload = $this->transformToDiscordFormat($payload);
-
-            // Log the Discord payload
-            Log::channel('webhooks')->info('Discord payload prepared', ['payload' => $discordPayload]);
 
             // Send the transformed data to Discord
             $response = $this->sendToDiscord($discordPayload);
 
-            // Log the Discord response
-            Log::channel('webhooks')->info('Discord response received', ['response' => $response]);
+            // Mark this webhook as processed
+            $this->markWebhookAsProcessed($webhookId);
 
             return response()->json(['message' => 'Webhook processed successfully']);
         } catch (\Exception $e) {
-            Log::channel('webhooks')->error('Error processing webhook', [
+            Log::error('Error processing webhook', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json(['error' => 'An error occurred while processing the webhook'], 500);
         }
+    }
+
+    private function isWebhookProcessed($webhookId)
+    {
+        return Cache::has("processed_webhook:{$webhookId}");
+    }
+
+    private function markWebhookAsProcessed($webhookId)
+    {
+        // Store the webhook ID in cache for 24 hours
+        Cache::put("processed_webhook:{$webhookId}", true, now()->addHours(24));
     }
 
     private function logWebhook(Request $request)
