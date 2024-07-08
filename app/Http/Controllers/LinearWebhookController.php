@@ -92,7 +92,7 @@ class LinearWebhookController extends Controller
             'footer' => [
                 'text' => 'Sent via Linear Webhook',
             ],
-            'timestamp' => date('c'),
+            'timestamp' => $linearPayload['createdAt'] ?? date('c'),
         ];
 
         $this->addProjectField($embed, $data);
@@ -130,38 +130,32 @@ class LinearWebhookController extends Controller
         $action = $payload['action'] ?? 'unknown';
         $data = $payload['data'] ?? [];
 
-        $userTag = isset($data['user']['id']) ? $this->getDiscordTag($data['user']['id']) : 'Someone';
-        $projectName = $data['team']['name'] ?? $data['project']['name'] ?? 'a project';
+        $actorId = $payload['actor']['id'] ?? null;
+        $userTag = $actorId ? $this->getDiscordTag($actorId) : 'Someone';
+
+        $projectName = $data['project']['name'] ?? 'Unknown Project';
 
         switch ($type) {
             case 'Issue':
                 $content = "{$userTag} {$this->getActionVerb($action)} an issue";
-
                 if ($action !== 'remove') {
                     $content .= " titled \"{$data['title']}\"";
                 }
-
                 $content .= " in {$projectName}.";
-
                 if (isset($data['assignee']['id'])) {
                     $assigneeTag = $this->getDiscordTag($data['assignee']['id']);
                     $content .= " Assigned to {$assigneeTag}.";
                 }
-
                 break;
-
             case 'Comment':
                 $content = "{$userTag} commented on the issue \"{$data['issue']['title']}\" in {$projectName}.";
                 break;
-
             case 'Project':
-                $content = "{$userTag} {$this->getActionVerb($action)} the project \"{$data['name']}\".";
+                $content = "{$userTag} {$this->getActionVerb($action)} the project \"{$projectName}\".";
                 break;
-
             case 'ProjectUpdate':
-                $content = "{$userTag} posted an update to the project \"{$data['project']['name']}\".";
+                $content = "{$userTag} posted an update to the project \"{$projectName}\".";
                 break;
-
             default:
                 $content = "{$userTag} performed an action in {$projectName}.";
         }
@@ -194,60 +188,35 @@ class LinearWebhookController extends Controller
 
     private function addProjectField(&$embed, $data)
     {
-        $projectName = $data['team']['name'] ?? $data['project']['name'] ?? null;
+        $projectName = $data['project']['name'] ?? 'Unknown Project';
 
-        if ($projectName) {
-            $embed['fields'][] = [
-                'name' => 'Project',
-                'value' => $projectName,
-                'inline' => true,
-            ];
-        }
-    }
-
-    private function getDiscordTag($linearUserId)
-    {
-        return $this->linearToDiscordMap[$linearUserId] ?? 'Unknown User';
-    }
-
-    private function getSender($payload)
-    {
-        if (isset($payload['data']['user']['name'])) {
-            $username = $payload['data']['user']['name'];
-            $avatarUrl = $payload['data']['user']['avatarUrl'] ?? null;
-        } else {
-            $username = 'Linear Webhook';
-            $avatarUrl = null;
-        }
-
-        return [
-            'username' => $username,
-            'avatar_url' => $avatarUrl,
+        $embed['fields'][] = [
+            'name' => 'Project',
+            'value' => $projectName,
+            'inline' => true,
         ];
     }
 
     private function addIssueFields(&$embed, $data)
     {
         $embed['fields'][] = [
-            'name' => 'Title',
-            'value' => $data['title'] ?? 'N/A',
-            'inline' => false,
-        ];
-        $embed['fields'][] = [
             'name' => 'Status',
-            'value' => $data['state']['name'] ?? 'N/A',
+            'value' => $data['state']['name'] ?? 'Unknown',
             'inline' => true,
         ];
+
         $embed['fields'][] = [
             'name' => 'Assignee',
             'value' => $data['assignee']['name'] ?? 'Unassigned',
             'inline' => true,
         ];
+
         $embed['fields'][] = [
             'name' => 'Priority',
-            'value' => $this->getPriorityEmoji($data['priority']) . ' ' . ($data['priority'] ?? 'N/A'),
+            'value' => $this->getPriorityEmoji($data['priority']) . ' ' . ($data['priorityLabel'] ?? 'N/A'),
             'inline' => true,
         ];
+
         if (isset($data['description'])) {
             $embed['fields'][] = [
                 'name' => 'Description',
@@ -255,50 +224,47 @@ class LinearWebhookController extends Controller
                 'inline' => false,
             ];
         }
-        if (isset($data['url'])) {
-            $embed['url'] = $data['url'];
-        }
+
+        $embed['url'] = $data['url'] ?? null;
     }
 
     private function addCommentFields(&$embed, $data)
     {
         $embed['fields'][] = [
             'name' => 'Issue',
-            'value' => $data['issue']['title'] ?? 'N/A',
+            'value' => $data['issue']['title'] ?? 'Unknown Issue',
             'inline' => false,
         ];
+
         $embed['fields'][] = [
             'name' => 'Comment by',
-            'value' => $data['user']['name'] ?? 'Unknown',
+            'value' => $data['user']['name'] ?? 'Unknown User',
             'inline' => true,
         ];
+
         $embed['fields'][] = [
             'name' => 'Content',
             'value' => $this->truncateText($data['body'], 1024),
             'inline' => false,
         ];
-        if (isset($data['url'])) {
-            $embed['url'] = $data['url'];
-        }
+
+        $embed['url'] = $data['url'] ?? null;
     }
 
     private function addProjectFields(&$embed, $data)
     {
         $embed['fields'][] = [
-            'name' => 'Project Name',
-            'value' => $data['name'] ?? 'N/A',
-            'inline' => false,
-        ];
-        $embed['fields'][] = [
             'name' => 'Status',
-            'value' => $data['state'] ?? 'N/A',
+            'value' => $data['state'] ?? 'Unknown',
             'inline' => true,
         ];
+
         $embed['fields'][] = [
             'name' => 'Lead',
             'value' => $data['lead']['name'] ?? 'Unassigned',
             'inline' => true,
         ];
+
         if (isset($data['description'])) {
             $embed['fields'][] = [
                 'name' => 'Description',
@@ -306,31 +272,25 @@ class LinearWebhookController extends Controller
                 'inline' => false,
             ];
         }
-        if (isset($data['url'])) {
-            $embed['url'] = $data['url'];
-        }
+
+        $embed['url'] = $data['url'] ?? null;
     }
 
     private function addProjectUpdateFields(&$embed, $data)
     {
         $embed['fields'][] = [
-            'name' => 'Project',
-            'value' => $data['project']['name'] ?? 'N/A',
-            'inline' => false,
-        ];
-        $embed['fields'][] = [
             'name' => 'Updated by',
-            'value' => $data['user']['name'] ?? 'Unknown',
+            'value' => $data['user']['name'] ?? 'Unknown User',
             'inline' => true,
         ];
+
         $embed['fields'][] = [
             'name' => 'Update',
             'value' => $this->truncateText($data['body'], 1024),
             'inline' => false,
         ];
-        if (isset($data['url'])) {
-            $embed['url'] = $data['url'];
-        }
+
+        $embed['url'] = $data['url'] ?? null;
     }
 
     private function getColorForAction($action)
@@ -360,11 +320,29 @@ class LinearWebhookController extends Controller
         return (strlen($text) > $length) ? substr($text, 0, $length - 3) . '...' : $text;
     }
 
+    private function getDiscordTag($linearUserId)
+    {
+        return $this->linearToDiscordMap[$linearUserId] ?? 'Unknown User';
+    }
+
+    private function getSender($payload)
+    {
+        $username = $payload['actor']['name'] ?? 'Linear Webhook';
+
+        return [
+            'username' => $username,
+            'avatar_url' => null,
+        ];
+    }
+
     private function sendToDiscord($payload)
     {
-        $discordWebhookUrl = str_replace('/github', '', config('services.discord.webhook_url'));
+        $discordWebhookUrl = config('services.discord.webhook_url');
 
-        Log::channel('webhooks')->info('Sending to Discord', ['url' => $discordWebhookUrl]);
+        Log::channel('webhooks')->info('Sending to Discord', [
+            'url' => $discordWebhookUrl,
+            'payload' => json_encode($payload, JSON_PRETTY_PRINT)
+        ]);
 
         try {
             $response = Http::post($discordWebhookUrl, $payload);
