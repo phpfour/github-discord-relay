@@ -36,7 +36,7 @@ class GitHubWebhookController extends Controller
 
     private function relayToDiscord($data, Request $request)
     {
-        $discordWebhookUrl = config('github_discord.discord_webhook_url');
+        $discordWebhookUrl = config('services.discord.webhook_url');
 
         $requiredHeaders = [
             'Accept', 'Content-Type', 'User-Agent',
