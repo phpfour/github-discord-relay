@@ -88,7 +88,24 @@ class LinearWebhookController extends Controller
                 $embed['description'] = "Unhandled event type: $type";
         }
 
-        return ['embeds' => [$embed]];
+        // Get the sender information
+        $sender = $this->getSender($linearPayload);
+
+        return [
+            'embeds' => [$embed],
+            'sender' => $sender,  // Add the sender field here
+        ];
+    }
+
+    private function getSender($payload)
+    {
+        // Try to get the user who triggered the event
+        if (isset($payload['data']['user']['name'])) {
+            return $payload['data']['user']['name'];
+        }
+
+        // If user is not available, use a default sender name
+        return 'Linear Webhook';
     }
 
     private function addIssueFields(&$embed, $data)
