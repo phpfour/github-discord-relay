@@ -18,21 +18,20 @@ class LinearWebhookController extends Controller
 
     public function handle(Request $request)
     {
-        // Extract the webhook ID from the payload
-        $webhookId = $request->input('webhookId');
-
-        // Check if we've already processed this webhook
-        if ($this->isWebhookProcessed($webhookId)) {
-            Log::info("Duplicate webhook received and ignored", ['webhookId' => $webhookId]);
-            return response()->json(['message' => 'Webhook already processed'], 200);
-        }
-
         try {
+            $payload = $request->all();
+
+            // Generate a unique identifier for this event
+            $eventId = $this->generateEventId($payload);
+
+            // Check if we've already processed this event
+            if ($this->isEventProcessed($eventId)) {
+                Log::info("Duplicate event received and ignored", ['eventId' => $eventId]);
+                return response()->json(['message' => 'Event already processed'], 200);
+            }
+
             // Log the incoming webhook
             $this->logWebhook($request);
-
-            // Validate the incoming webhook
-            $payload = $request->all();
 
             // Transform the Linear webhook data to Discord format
             $discordPayload = $this->transformToDiscordFormat($payload);
@@ -40,8 +39,8 @@ class LinearWebhookController extends Controller
             // Send the transformed data to Discord
             $response = $this->sendToDiscord($discordPayload);
 
-            // Mark this webhook as processed
-            $this->markWebhookAsProcessed($webhookId);
+            // Mark this event as processed
+            $this->markEventAsProcessed($eventId);
 
             return response()->json(['message' => 'Webhook processed successfully']);
         } catch (\Exception $e) {
@@ -54,15 +53,28 @@ class LinearWebhookController extends Controller
         }
     }
 
-    private function isWebhookProcessed($webhookId)
+    private function generateEventId($payload)
     {
-        return Cache::has("processed_webhook:{$webhookId}");
+        // Create a unique identifier based on the event details
+        $components = [
+            $payload['type'] ?? '',
+            $payload['action'] ?? '',
+            $payload['data']['id'] ?? '',
+            $payload['createdAt'] ?? '',
+        ];
+
+        return md5(implode('|', $components));
     }
 
-    private function markWebhookAsProcessed($webhookId)
+    private function isEventProcessed($eventId)
     {
-        // Store the webhook ID in cache for 24 hours
-        Cache::put("processed_webhook:{$webhookId}", true, now()->addHours(24));
+        return Cache::has("processed_event:{$eventId}");
+    }
+
+    private function markEventAsProcessed($eventId)
+    {
+        // Store the event ID in cache for 24 hours
+        Cache::put("processed_event:{$eventId}", true, now()->addHours(24));
     }
 
     private function logWebhook(Request $request)
