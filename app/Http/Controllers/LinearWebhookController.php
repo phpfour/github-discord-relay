@@ -61,8 +61,10 @@ class LinearWebhookController extends Controller
         $type = $linearPayload['type'] ?? 'unknown';
         $data = $linearPayload['data'] ?? [];
 
+        $content = "New Linear Event: $action $type";
+
         $embed = [
-            'title' => "New Linear Event: $action $type",
+            'title' => $content,
             'color' => $this->getColorForAction($action),
             'fields' => [],
             'footer' => [
@@ -92,8 +94,10 @@ class LinearWebhookController extends Controller
         $sender = $this->getSender($linearPayload);
 
         return [
+            'content' => $content,
             'embeds' => [$embed],
-            'sender' => $sender,  // Add the sender field here
+            'avatar_url' => $sender['avatar_url'],
+            'username' => $sender['username'],
         ];
     }
 
@@ -101,11 +105,17 @@ class LinearWebhookController extends Controller
     {
         // Try to get the user who triggered the event
         if (isset($payload['data']['user']['name'])) {
-            return $payload['data']['user']['name'];
+            $username = $payload['data']['user']['name'];
+            $avatarUrl = $payload['data']['user']['avatarUrl'] ?? null;
+        } else {
+            $username = 'Linear Webhook';
+            $avatarUrl = null; // You could set a default avatar URL here if you have one
         }
 
-        // If user is not available, use a default sender name
-        return 'Linear Webhook';
+        return [
+            'username' => $username,
+            'avatar_url' => $avatarUrl,
+        ];
     }
 
     private function addIssueFields(&$embed, $data)
