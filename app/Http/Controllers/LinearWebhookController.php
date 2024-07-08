@@ -1,0 +1,200 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
+
+class LinearWebhookController extends Controller
+{
+    public function handle(Request $request)
+    {
+        // Validate the incoming webhook
+        $payload = $request->all();
+
+        // Transform the Linear webhook data to Discord format
+        $discordPayload = $this->transformToDiscordFormat($payload);
+
+        // Send the transformed data to Discord
+        $this->sendToDiscord($discordPayload);
+
+        return response()->json(['message' => 'Webhook processed successfully']);
+    }
+
+    private function transformToDiscordFormat($linearPayload)
+    {
+        $action = $linearPayload['action'] ?? 'unknown';
+        $type = $linearPayload['type'] ?? 'unknown';
+        $data = $linearPayload['data'] ?? [];
+
+        $embed = [
+            'title' => "New Linear Event: $action $type",
+            'color' => $this->getColorForAction($action),
+            'fields' => [],
+            'footer' => [
+                'text' => 'Sent via Linear Webhook',
+            ],
+            'timestamp' => date('c'),
+        ];
+
+        switch ($type) {
+            case 'Issue':
+                $this->addIssueFields($embed, $data);
+                break;
+            case 'Comment':
+                $this->addCommentFields($embed, $data);
+                break;
+            case 'Project':
+                $this->addProjectFields($embed, $data);
+                break;
+            case 'ProjectUpdate':
+                $this->addProjectUpdateFields($embed, $data);
+                break;
+            default:
+                $embed['description'] = "Unhandled event type: $type";
+        }
+
+        return ['embeds' => [$embed]];
+    }
+
+    private function addIssueFields(&$embed, $data)
+    {
+        $embed['fields'][] = [
+            'name' => 'Title',
+            'value' => $data['title'] ?? 'N/A',
+            'inline' => false,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Status',
+            'value' => $data['state']['name'] ?? 'N/A',
+            'inline' => true,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Assignee',
+            'value' => $data['assignee']['name'] ?? 'Unassigned',
+            'inline' => true,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Priority',
+            'value' => $this->getPriorityEmoji($data['priority']) . ' ' . ($data['priority'] ?? 'N/A'),
+            'inline' => true,
+        ];
+        if (isset($data['description'])) {
+            $embed['fields'][] = [
+                'name' => 'Description',
+                'value' => $this->truncateText($data['description'], 1024),
+                'inline' => false,
+            ];
+        }
+        if (isset($data['url'])) {
+            $embed['url'] = $data['url'];
+        }
+    }
+
+    private function addCommentFields(&$embed, $data)
+    {
+        $embed['fields'][] = [
+            'name' => 'Issue',
+            'value' => $data['issue']['title'] ?? 'N/A',
+            'inline' => false,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Comment by',
+            'value' => $data['user']['name'] ?? 'Unknown',
+            'inline' => true,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Content',
+            'value' => $this->truncateText($data['body'], 1024),
+            'inline' => false,
+        ];
+        if (isset($data['url'])) {
+            $embed['url'] = $data['url'];
+        }
+    }
+
+    private function addProjectFields(&$embed, $data)
+    {
+        $embed['fields'][] = [
+            'name' => 'Project Name',
+            'value' => $data['name'] ?? 'N/A',
+            'inline' => false,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Status',
+            'value' => $data['state'] ?? 'N/A',
+            'inline' => true,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Lead',
+            'value' => $data['lead']['name'] ?? 'Unassigned',
+            'inline' => true,
+        ];
+        if (isset($data['description'])) {
+            $embed['fields'][] = [
+                'name' => 'Description',
+                'value' => $this->truncateText($data['description'], 1024),
+                'inline' => false,
+            ];
+        }
+        if (isset($data['url'])) {
+            $embed['url'] = $data['url'];
+        }
+    }
+
+    private function addProjectUpdateFields(&$embed, $data)
+    {
+        $embed['fields'][] = [
+            'name' => 'Project',
+            'value' => $data['project']['name'] ?? 'N/A',
+            'inline' => false,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Updated by',
+            'value' => $data['user']['name'] ?? 'Unknown',
+            'inline' => true,
+        ];
+        $embed['fields'][] = [
+            'name' => 'Update',
+            'value' => $this->truncateText($data['body'], 1024),
+            'inline' => false,
+        ];
+        if (isset($data['url'])) {
+            $embed['url'] = $data['url'];
+        }
+    }
+
+    private function getColorForAction($action)
+    {
+        return match ($action) {
+            'create' => 0x4CAF50,  // Green
+            'update' => 0x2196F3,  // Blue
+            'remove' => 0xF44336,  // Red
+            default => 0x9E9E9E,   // Grey
+        };
+    }
+
+    private function getPriorityEmoji($priority)
+    {
+        return match ($priority) {
+            0 => '🟢',  // No priority
+            1 => '🔵',  // Low
+            2 => '🟡',  // Medium
+            3 => '🟠',  // High
+            4 => '🔴',  // Urgent
+            default => '❓',
+        };
+    }
+
+    private function truncateText($text, $length = 1024)
+    {
+        return (strlen($text) > $length) ? substr($text, 0, $length - 3) . '...' : $text;
+    }
+
+    private function sendToDiscord($payload)
+    {
+        $discordWebhookUrl = config('github_discord.discord_webhook_url');
+
+        Http::post($discordWebhookUrl, $payload);
+    }
+}

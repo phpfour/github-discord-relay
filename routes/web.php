@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\GitHubWebhookController;
+use App\Http\Controllers\LinearWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,3 +20,4 @@ Route::get('/', function () {
 });
 
 Route::post('/github/webhook', [GitHubWebhookController::class, 'handle']);
+Route::post('/linear/webhook', [LinearWebhookController::class, 'handle']);

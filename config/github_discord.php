@@ -6,5 +6,6 @@ return [
     'github_to_discord_map' => [
         // GitHub username => Discord user ID
         'phpfour' => '<@538057585698537506>',
+        'OmarFaruk-0x01' => '<@862462774578774047>',
     ],
 ];
