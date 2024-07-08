@@ -26,7 +26,7 @@ class LinearWebhookController extends Controller
 
             // Check if we've already processed this event
             if ($this->isEventProcessed($eventId)) {
-                Log::info("Duplicate event received and ignored", ['eventId' => $eventId]);
+                Log::channel('webhooks')->info("Duplicate event received and ignored", ['eventId' => $eventId]);
                 return response()->json(['message' => 'Event already processed'], 200);
             }
 
