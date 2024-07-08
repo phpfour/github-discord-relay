@@ -10,19 +10,37 @@ class LinearWebhookController extends Controller
 {
     public function handle(Request $request)
     {
-        // Log the incoming webhook
-        $this->logWebhook($request);
+        try {
+            // Log the incoming webhook
+            $this->logWebhook($request);
 
-        // Validate the incoming webhook
-        $payload = $request->all();
+            // Validate the incoming webhook
+            $payload = $request->all();
 
-        // Transform the Linear webhook data to Discord format
-        $discordPayload = $this->transformToDiscordFormat($payload);
+            // Log the Linear payload
+            Log::channel('webhooks')->info('Linear payload received', ['payload' => $payload]);
 
-        // Send the transformed data to Discord
-        $this->sendToDiscord($discordPayload);
+            // Transform the Linear webhook data to Discord format
+            $discordPayload = $this->transformToDiscordFormat($payload);
 
-        return response()->json(['message' => 'Webhook processed successfully']);
+            // Log the Discord payload
+            Log::channel('webhooks')->info('Discord payload prepared', ['payload' => $discordPayload]);
+
+            // Send the transformed data to Discord
+            $response = $this->sendToDiscord($discordPayload);
+
+            // Log the Discord response
+            Log::channel('webhooks')->info('Discord response received', ['response' => $response]);
+
+            return response()->json(['message' => 'Webhook processed successfully']);
+        } catch (\Exception $e) {
+            Log::channel('webhooks')->error('Error processing webhook', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(['error' => 'An error occurred while processing the webhook'], 500);
+        }
     }
 
     private function logWebhook(Request $request)
@@ -209,8 +227,30 @@ class LinearWebhookController extends Controller
 
     private function sendToDiscord($payload)
     {
-        $discordWebhookUrl = config('github_discord.discord_webhook_url');
+        $discordWebhookUrl = config('services.discord.webhook_url');
 
-        Http::post($discordWebhookUrl, $payload);
+        Log::channel('webhooks')->info('Sending to Discord', ['url' => $discordWebhookUrl]);
+
+        try {
+            $response = Http::post($discordWebhookUrl, $payload);
+
+            if ($response->successful()) {
+                Log::channel('webhooks')->info('Successfully sent to Discord', ['status' => $response->status()]);
+            } else {
+                Log::channel('webhooks')->error('Failed to send to Discord', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+            }
+
+            return $response;
+        } catch (\Exception $e) {
+            Log::channel('webhooks')->error('Exception when sending to Discord', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            throw $e;
+        }
     }
 }
