@@ -254,7 +254,7 @@ class LinearWebhookController extends Controller
 
     private function sendToDiscord($payload)
     {
-        $discordWebhookUrl = config('services.discord.webhook_url');
+        $discordWebhookUrl = str_replace('/github', '', config('services.discord.webhook_url'));
 
         Log::channel('webhooks')->info('Sending to Discord', ['url' => $discordWebhookUrl]);
 
