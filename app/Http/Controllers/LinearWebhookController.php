@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class LinearWebhookController extends Controller
 {
     public function handle(Request $request)
     {
+        // Log the incoming webhook
+        $this->logWebhook($request);
+
         // Validate the incoming webhook
         $payload = $request->all();
 
@@ -19,6 +23,18 @@ class LinearWebhookController extends Controller
         $this->sendToDiscord($discordPayload);
 
         return response()->json(['message' => 'Webhook processed successfully']);
+    }
+
+    private function logWebhook(Request $request)
+    {
+        $logData = [
+            'headers' => $request->headers->all(),
+            'payload' => $request->all(),
+            'ip' => $request->ip(),
+            'timestamp' => now()->toIso8601String(),
+        ];
+
+        Log::channel('webhooks')->info('Incoming Linear webhook', $logData);
     }
 
     private function transformToDiscordFormat($linearPayload)
