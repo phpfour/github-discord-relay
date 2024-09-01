@@ -11,6 +11,10 @@ class LinearWebhookController extends Controller
 {
     private array $linearToDiscordMap;
 
+    private array $skipActions = [
+        'issue' => ['update'],
+    ];
+
     public function __construct()
     {
         $this->linearToDiscordMap = config('user_mapping.linear');
@@ -37,7 +41,7 @@ class LinearWebhookController extends Controller
             $discordPayload = $this->transformToDiscordFormat($payload);
 
             // Send the transformed data to Discord
-            $response = $this->sendToDiscord($discordPayload);
+            $this->sendToDiscord($discordPayload);
 
             // Mark this event as processed
             $this->markEventAsProcessed($eventId);
@@ -87,6 +91,18 @@ class LinearWebhookController extends Controller
         ];
 
         Log::channel('webhooks')->info('Incoming Linear webhook', $logData);
+    }
+
+    private function shouldProcess($linearPayload): bool
+    {
+        $action = strtolower($linearPayload['action'] ?? 'unknown');
+        $type = strtolower($linearPayload['type'] ?? 'unknown');
+
+        if (isset($this->skipActions[$type]) && in_array($action, $this->skipActions[$type])) {
+            return false;
+        }
+
+        return true;
     }
 
     private function transformToDiscordFormat($linearPayload)
@@ -347,8 +363,12 @@ class LinearWebhookController extends Controller
         ];
     }
 
-    private function sendToDiscord($payload)
+    private function sendToDiscord($payload): void
     {
+        if (! $this->shouldProcess($payload)) {
+            return;
+        }
+
         $discordWebhookUrl = config('services.discord.webhook_url_2');
 
         Log::channel('webhooks')->info('Sending to Discord', [
@@ -367,15 +387,11 @@ class LinearWebhookController extends Controller
                     'body' => $response->body()
                 ]);
             }
-
-            return $response;
         } catch (\Exception $e) {
             Log::channel('webhooks')->error('Exception when sending to Discord', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-
-            throw $e;
         }
     }
 }
