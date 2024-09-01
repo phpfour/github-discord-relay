@@ -98,6 +98,8 @@ class LinearWebhookController extends Controller
         $action = strtolower($linearPayload['action'] ?? 'unknown');
         $type = strtolower($linearPayload['type'] ?? 'unknown');
 
+        Log::channel('webhooks')->info("Action: $action, Type: $type, HasAction: " . isset($this->skipActions[$type]) . ", InArray: " . in_array($action, $this->skipActions[$type]));
+
         if (isset($this->skipActions[$type]) && in_array($action, $this->skipActions[$type])) {
             return false;
         }
