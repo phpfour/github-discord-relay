@@ -27,13 +27,7 @@ class GitHubWebhookController extends Controller
             }
 
             foreach ($githubToDiscordMap as $githubUser => $discordUser) {
-                if ($item === $githubUser) {
-                    $item = $discordUser;
-                    continue;
-                }
-
-                $pattern = '/(?<![A-Za-z0-9-])@' . preg_quote($githubUser, '/') . '(?![A-Za-z0-9-])/';
-                $item = preg_replace($pattern, $discordUser, $item);
+                $item = str_replace("@$githubUser", $discordUser, $item);
             }
         });
 
