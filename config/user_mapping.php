@@ -3,7 +3,6 @@
 return [
     'github' => [
         // GitHub username => Discord user ID
-        // 'phpfour' => '<@1234567890>',
         'phpfour' => '<@538057585698537506>',
         'OmarFaruk-0x01' => '<@862462774578774047>',
         'ajaxray' => '<@1019936843015405588>',
@@ -15,6 +14,7 @@ return [
         'theihasan' => '<@1102886197916876801>',
         'Chy-Zaber-Bin-Zahid' => '<@471235756690505728>',
         'mdzahid-pro' => '<@1349257244956557334>',
+        'ashrafiucse' => '<@1248255735071113348>',
     ],
 
     'linear' => [
