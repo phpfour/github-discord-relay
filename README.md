@@ -35,7 +35,7 @@ These are registered outside the `web` middleware group (no CSRF/session).
 
 ## Requirements
 
-- PHP 8.3+
+- PHP 8.4+
 - Composer
 - Node 20+ and [pnpm](https://pnpm.io/)
 - SQLite (default) or any Laravel-supported database
