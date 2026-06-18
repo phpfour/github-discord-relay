@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { BookOpen, FolderGit2, LayoutGrid, Route as RouteIcon, Settings2, Users } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -21,6 +21,21 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Members',
+        href: '/members',
+        icon: Users,
+    },
+    {
+        title: 'Routes',
+        href: '/routes',
+        icon: RouteIcon,
+    },
+    {
+        title: 'Relay Settings',
+        href: '/relay-settings',
+        icon: Settings2,
     },
 ];
 
