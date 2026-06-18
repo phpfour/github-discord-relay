@@ -1,23 +1,11 @@
 <?php
 
-use App\Http\Controllers\GitHubWebhookController;
-use App\Http\Controllers\LinearWebhookController;
 use Illuminate\Support\Facades\Route;
 
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
-|
-*/
+Route::inertia('/', 'welcome')->name('home');
 
-Route::get('/', function () {
-    return view('welcome');
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::inertia('dashboard', 'dashboard')->name('dashboard');
 });
 
-Route::post('/github/webhook', [GitHubWebhookController::class, 'handle']);
-Route::post('/linear/webhook', [LinearWebhookController::class, 'handle']);
+require __DIR__.'/settings.php';
