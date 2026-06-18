@@ -17,7 +17,7 @@ class SettingController extends Controller
             // Never send secrets to the client; only whether they are configured.
             'githubSecretConfigured' => Setting::get('github_webhook_secret') !== null,
             'linearSecretConfigured' => Setting::get('linear_webhook_secret') !== null,
-            'linearSkipFilter' => Setting::get('linear_skip_filter', json_encode(['issue' => ['update']])),
+            'linearSkipFilter' => Setting::get('linear_skip_filter', '{"issue":["update"]}'),
         ]);
     }
 

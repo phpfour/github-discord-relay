@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Member;
 use App\Models\MemberIdentity;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -42,7 +43,8 @@ class MemberRequest extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $identities = $this->input('identities', []);
-            $ignoreMemberId = $this->route('member')?->id;
+            $member = $this->route('member');
+            $ignoreMemberId = $member instanceof Member ? $member->id : null;
 
             $seen = [];
             foreach ($identities as $i => $identity) {

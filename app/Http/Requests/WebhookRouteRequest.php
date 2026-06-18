@@ -54,7 +54,8 @@ class WebhookRouteRequest extends FormRequest
 
             // Non-global scopes require a match value; global must not have one.
             if ($scope === 'global') {
-                $ignoreId = $this->route('route')?->id;
+                $routeModel = $this->route('route');
+                $ignoreId = $routeModel instanceof WebhookRoute ? $routeModel->id : null;
                 $exists = WebhookRoute::where('source', $source)
                     ->where('scope', 'global')
                     ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))

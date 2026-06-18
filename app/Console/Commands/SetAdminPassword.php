@@ -14,7 +14,7 @@ class SetAdminPassword extends Command
 
     public function handle(): int
     {
-        $email = $this->argument('email') ?: env('ADMIN_EMAIL', 'admin@example.com');
+        $email = (string) ($this->argument('email') ?: config('admin.email'));
 
         $user = User::where('email', $email)->first();
 
