@@ -1,48 +1,87 @@
-# GitHub to Discord Webhook Relay
+# GitHub / Linear → Discord Relay
 
-This simple application receives webhooks from GitHub, modifies the payload to replace GitHub user mentions with Discord user mentions, and relays the payload to a Discord channel via a webhook.
+A Laravel 13 + Inertia (React) application that relays GitHub and Linear
+webhooks to Discord, rewriting source-platform mentions into Discord mentions.
+All configuration — member mappings, destination routing, and signing secrets —
+lives in the database and is managed through a single-admin web GUI, so onboarding
+a teammate or routing a new repo/org/team needs no code change or redeploy.
 
-## Installation
+## Features
 
-### Prerequisites
+- **Member mappings** — map a person's GitHub username(s) and Linear UUID to a
+  single Discord user, managed in the GUI.
+- **Most-specific-match routing** — pick the destination Discord webhook by
+  scope: GitHub `repo → org → global`, Linear `project → team → global`.
+- **Faithful relay behavior**
+  - GitHub: recursively rewrites `@username` → `<@discordId>`, forwards the raw
+    payload to the destination URL with `/github` appended and the required
+    `X-GitHub-*` headers re-proxied.
+  - Linear: builds per-type Discord embeds (Issue / Comment / Project /
+    ProjectUpdate), with 24h deduplication, color-by-action, priority emoji, and
+    a configurable skip filter.
+- **Optional inbound signature verification** — when a per-source signing secret
+  is configured, requests are verified (HMAC-SHA256 of the raw body) and forged
+  requests are rejected with `401`. With no secret configured, requests are
+  accepted (original behavior).
 
-- PHP >= 8.1
+## Inbound endpoints
+
+Preserved from the original app so existing webhook configs keep working:
+
+- `POST /github/webhook`
+- `POST /linear/webhook`
+
+These are registered outside the `web` middleware group (no CSRF/session).
+
+## Requirements
+
+- PHP 8.4+
 - Composer
-- Laravel 10.x or later
+- Node 20+ and [pnpm](https://pnpm.io/)
+- SQLite (default) or any Laravel-supported database
 
-### Steps
+## Setup
 
-1. **Clone the Repository**
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
 
-   ```bash
-   git clone https://github.com/phpfour/github-discord-relay.git
-   cd github-discord-relay
-   ```
-2. **Install Dependencies**
+# Set the admin credentials and (optionally) the two default destination
+# webhooks in .env: ADMIN_EMAIL, ADMIN_PASSWORD, DISCORD_WEBHOOK_URL_1/2
 
-    ```bash
-    composer install
-    ```
+php artisan migrate --seed   # seeds the admin + existing mappings/routes
+pnpm install
+pnpm run build               # or `pnpm run dev` during development
+php artisan serve
+```
 
-3. **Configure Environment**
+Log in at `/login` with the seeded admin credentials, then manage **Members**,
+**Routes**, and **Relay Settings** from the sidebar.
 
-   Copy the .env.example file to .env and update the `DISCORD_WEBHOOK_URL` variable with your Discord webhook URL:
+### Resetting the admin password
 
-    ```bash
-    cp .env.example .env
-    ```
-4. Generate Application Key
+```bash
+php artisan app:set-admin-password
+```
 
-    ```
-    php artisan key:generate
-    ```
-5. Update the GitHub User to Discord User mapping in the `config/github-discord.php` file.
+## Configuration model
 
-    ```php
-   'github_to_discord_map' => [
-        // GitHub username => Discord user ID
-        'phpfour' => '<@538057585698537506>',
-    ],
-    ```
+| Concern                | Where it lives                                   |
+| ---------------------- | ------------------------------------------------ |
+| Members & identities   | `members` / `member_identities` tables (GUI)     |
+| Destination routing    | `webhook_routes` table (GUI)                     |
+| Signing secrets        | `settings` table, encrypted (Relay Settings GUI) |
+| Linear skip filter     | `settings` table (Relay Settings GUI)            |
 
-6. Host the application on a server and point your GitHub webhook to the `/github/webhook` endpoint.
+The `RelayMappingSeeder` migrates the original `config/user_mapping.php` data and
+the two `DISCORD_WEBHOOK_URL_*` destinations into the database on first seed.
+
+## Testing
+
+```bash
+php artisan test            # PHPUnit (unit + feature)
+./vendor/bin/pint           # PHP formatting
+pnpm run lint:check         # ESLint
+pnpm run types:check        # tsc
+```

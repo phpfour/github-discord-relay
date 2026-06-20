@@ -1,65 +1,53 @@
-<?php declare(strict_types=1);
+<?php
 
 namespace App\Http\Controllers;
 
+use App\Services\Relay\GitHubRelay;
+use App\Services\Relay\MatchKeys;
+use App\Services\Relay\RouteResolver;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use GuzzleHttp\Client;
 
 class GitHubWebhookController extends Controller
 {
-    public function handle(Request $request)
-    {
-        $modifiedPayload = $this->modifyPayload($request->all());
+    public function __construct(
+        private readonly RouteResolver $resolver,
+        private readonly GitHubRelay $relay,
+    ) {}
 
-        $this->relayToDiscord($modifiedPayload, $request);
+    public function handle(Request $request): JsonResponse
+    {
+        $payload = $request->all();
+
+        $keys = $this->matchKeys($payload);
+        $route = $this->resolver->resolve('github', $keys);
+
+        if ($route === null) {
+            Log::channel('webhooks')->info('No GitHub route matched; dropping event', [
+                'repo' => $keys->get('repo'),
+                'org' => $keys->get('org'),
+            ]);
+
+            return response()->json(['status' => 'No matching route; event dropped']);
+        }
+
+        $this->relay->relay($route, $payload, $request);
 
         return response()->json(['status' => 'Payload relayed to Discord']);
     }
 
-    private function modifyPayload(array $data)
+    /**
+     * @param  array<mixed>  $payload
+     */
+    private function matchKeys(array $payload): MatchKeys
     {
-        $githubToDiscordMap = config('user_mapping.github');
+        $repo = $payload['repository']['full_name'] ?? null;
 
-        array_walk_recursive($data, function (&$item) use ($githubToDiscordMap) {
-            if (! is_string($item)) {
-                return;
-            }
+        $org = $payload['organization']['login']
+            ?? $payload['repository']['owner']['login']
+            ?? (is_string($repo) ? explode('/', $repo)[0] : null);
 
-            foreach ($githubToDiscordMap as $githubUser => $discordUser) {
-                $item = str_replace("@$githubUser", $discordUser, $item);
-            }
-        });
-
-        return $data;
-    }
-
-    private function relayToDiscord($data, Request $request)
-    {
-        $discordWebhookUrl = config('services.discord.webhook_url_1') . '/github';
-
-        $requiredHeaders = [
-            'Accept', 'Content-Type', 'User-Agent',
-            'X-GitHub-Delivery', 'X-GitHub-Event', 'X-GitHub-Hook-ID',
-            'X-GitHub-Hook-Installation-Target-ID', 'X-GitHub-Hook-Installation-Target-Type',
-        ];
-
-        $headers = collect($requiredHeaders)
-            ->mapWithKeys(fn($header) => [$header => $request->header($header)])
-            ->toArray();
-
-        $client = new Client([
-            'base_uri' => 'https://discord.com/api/',
-            'timeout'  => 2.0,
-        ]);
-
-        try {
-            $client->post($discordWebhookUrl, [
-                'headers' => $headers,
-                'json' => $data,
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error relaying payload to Discord: ' . $e->getMessage());
-        }
+        return MatchKeys::github($repo, $org);
     }
 }
